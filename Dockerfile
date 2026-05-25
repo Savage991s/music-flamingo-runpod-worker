@@ -15,7 +15,10 @@
 #     uncomment the RUN line below. This bakes weights into the image
 #     (faster first-call, larger image, slower cold-pulls on new workers).
 
-FROM runpod/pytorch:2.5.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+# 2.4.0-py3.11-cuda12.4.1 is a verified tag on Docker Hub (runpod doesn't ship a
+# 2.5.x py3.11 tag yet). PyTorch 2.4 + CUDA 12.4 is fully compatible with
+# transformers >= 4.50 and the Audio Flamingo / Music Flamingo model code.
+FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 WORKDIR /app
 
