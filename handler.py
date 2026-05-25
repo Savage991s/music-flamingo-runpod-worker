@@ -181,5 +181,7 @@ def handler(event: dict[str, Any]) -> dict[str, Any]:
                 pass
 
 
-if __name__ == "__main__":
-    runpod.serverless.start({"handler": handler})
+# Called at module top-level (not under `if __name__ == "__main__"`) so RunPod's
+# static "is this a serverless worker?" scanner finds it. The container's
+# CMD always runs this file with python directly, so unconditional start is safe.
+runpod.serverless.start({"handler": handler})
