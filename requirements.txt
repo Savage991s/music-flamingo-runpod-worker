@@ -1,0 +1,12 @@
+# Music Flamingo + RunPod handler dependencies.
+# torch is provided by the runpod/pytorch base image and intentionally NOT pinned here
+# to avoid version conflicts. We pin the audio/HF stack to versions known to work
+# with Music Flamingo / Audio Flamingo 3.
+
+runpod>=1.7
+transformers>=4.50
+accelerate>=0.34
+huggingface_hub>=0.26
+librosa>=0.10.2
+soundfile>=0.12.1
+requests>=2.32
