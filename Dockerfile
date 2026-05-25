@@ -46,9 +46,14 @@ COPY handler.py /app/handler.py
 # Uncomment to bake the model into the image (see note above):
 # ARG MUSIC_FLAMINGO_PREDOWNLOAD=0
 # RUN if [ "$MUSIC_FLAMINGO_PREDOWNLOAD" = "1" ]; then \
-#       python -c "from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor; \
+#       python3 -c "from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor; \
 #                  AutoProcessor.from_pretrained('nvidia/music-flamingo-hf'); \
 #                  AudioFlamingo3ForConditionalGeneration.from_pretrained('nvidia/music-flamingo-hf')"; \
 #     fi
 
-CMD ["python", "-u", "/app/handler.py"]
+# Clear the base image's ENTRYPOINT. runpod/pytorch images set an ENTRYPOINT
+# meant for interactive Pod usage (starts sshd / Jupyter) and that conflicts
+# with serverless workers — the container exits before our handler runs.
+# Empty ENTRYPOINT + explicit CMD restores the standard serverless launch path.
+ENTRYPOINT []
+CMD ["python3", "-u", "/app/handler.py"]
