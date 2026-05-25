@@ -181,12 +181,14 @@ def handler(event: dict[str, Any]) -> dict[str, Any]:
             _decode_b64(audio_b64, audio_format) if audio_b64 else _download(audio_url)
         )
         text = _critique(audio_path, prompt, max_new_tokens, system_prompt)
+        # RunPod's runtime wraps whatever we return under a top-level "output"
+        # key — returning the bare dict here gives the caller {"output": {...}}.
+        # Earlier versions of this handler wrapped explicitly and produced
+        # {"output": {"output": {...}}}, which broke the TS client's parser.
         return {
-            "output": {
-                "text": text,
-                "elapsedSec": round(time.time() - started, 2),
-                "model": MODEL_ID,
-            }
+            "text": text,
+            "elapsedSec": round(time.time() - started, 2),
+            "model": MODEL_ID,
         }
     except Exception as exc:
         print(f"[handler] error: {exc}\n{traceback.format_exc()}", flush=True)
