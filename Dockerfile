@@ -1,59 +1,46 @@
 # Music Flamingo serverless worker — runs on RunPod GPU instances.
 #
-# Base image: RunPod's official PyTorch image with CUDA 12.4 + PyTorch 2.5.
-# Includes torch, torchaudio, basic system deps, and the `runpod` Python SDK.
-# We layer the model code + our handler on top.
+# Base image: runpod/base — RunPod's recommended starter for serverless
+# workers. It ships with Python 3.11 + pip + the runpod CLI tools but is
+# otherwise barebones: NO pre-installed PyTorch, NO sshd entrypoint that
+# fights with serverless. We install torch + the model stack on top.
 #
-# Cold-start optimization:
-#   - The model (~16 GB) is NOT baked into the image. Doing so would push the
-#     image past 30 GB, slow every pull, and lock us to a specific MF revision.
-#   - Instead the handler downloads weights from HF on first call and caches
-#     them under /runpod-volume (RunPod persists this between cold starts on
-#     the same endpoint). After the first cold start, subsequent ones reuse
-#     the cache and finish in ~10-15 s.
-#   - To pre-warm: set MUSIC_FLAMINGO_PREDOWNLOAD=1 in the endpoint env and
-#     uncomment the RUN line below. This bakes weights into the image
-#     (faster first-call, larger image, slower cold-pulls on new workers).
+# Why not runpod/pytorch:* — those images are tuned for interactive Pods
+# and ship an ENTRYPOINT that starts sshd / Jupyter. In serverless that
+# entrypoint runs instead of the handler, and the worker exits with code 1
+# before any Python is reached. Clearing the ENTRYPOINT in Dockerfile also
+# strips CUDA library setup that the entrypoint relied on, producing the
+# same silent crash. The clean fix is to start from runpod/base.
 
-# PyTorch 2.8 / CUDA 12.8 — the git-main transformers we install in
-# requirements.txt imports torch.distributed.tensor.parallel.ParallelStyle,
-# which only exists in torch >= 2.6. PyTorch 2.4 throws NameError at import.
-# This is the newest verified runpod/pytorch tag on Docker Hub.
-FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+FROM runpod/base:1.0.3-cuda1290-ubuntu2404
 
 WORKDIR /app
 
-# System deps for librosa/soundfile + a small set of audio codecs so we can
-# decode whatever WAV/MP3/FLAC the caller throws at us without surprises.
+# System-level audio codecs so librosa / soundfile can decode any wav/mp3/
+# flac/aiff the caller throws at us.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Python deps — cached layer separate from handler code so iteration on
-# handler.py doesn't re-resolve the wheel set.
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Install PyTorch first with the explicit CUDA wheel index, then the rest
+# of the stack. Order matters — some packages (accelerate, transformers
+# with native extensions) link against torch at install time.
+# cu128 wheels are forward-compatible with CUDA 12.9 runtime in the base
+# image.
+RUN python3 -m pip install --no-cache-dir --upgrade pip \
+    && python3 -m pip install --no-cache-dir \
+        torch --index-url https://download.pytorch.org/whl/cu128
 
-# Tell HF + transformers to cache models on the persistent volume so cold
-# starts after the first one are fast.
+COPY requirements.txt /app/requirements.txt
+RUN python3 -m pip install --no-cache-dir -r /app/requirements.txt
+
+# Tell HF + transformers to cache models on the persistent worker volume so
+# only the very first cold start pays the ~16 GB MF download.
 ENV HF_HOME=/runpod-volume/huggingface
 ENV TRANSFORMERS_CACHE=/runpod-volume/huggingface
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
 
 COPY handler.py /app/handler.py
 
-# Uncomment to bake the model into the image (see note above):
-# ARG MUSIC_FLAMINGO_PREDOWNLOAD=0
-# RUN if [ "$MUSIC_FLAMINGO_PREDOWNLOAD" = "1" ]; then \
-#       python3 -c "from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor; \
-#                  AutoProcessor.from_pretrained('nvidia/music-flamingo-hf'); \
-#                  AudioFlamingo3ForConditionalGeneration.from_pretrained('nvidia/music-flamingo-hf')"; \
-#     fi
-
-# Clear the base image's ENTRYPOINT. runpod/pytorch images set an ENTRYPOINT
-# meant for interactive Pod usage (starts sshd / Jupyter) and that conflicts
-# with serverless workers — the container exits before our handler runs.
-# Empty ENTRYPOINT + explicit CMD restores the standard serverless launch path.
-ENTRYPOINT []
 CMD ["python3", "-u", "/app/handler.py"]
