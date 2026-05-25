@@ -60,9 +60,14 @@ def _load_model() -> None:
     print(f"[handler] loading {MODEL_ID}…", flush=True)
     _DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     _PROCESSOR = AutoProcessor.from_pretrained(MODEL_ID)
+    # float16 instead of bfloat16: AudioFlamingo3 in transformers main has a
+    # known mismatch (issue #42259) where the audio tower produces float
+    # outputs that don't auto-cast against bf16 biases in the language model.
+    # fp16 is the same memory footprint (~16 GB for 8B params) and is the
+    # default expected by the audio encoder, so the mismatch disappears.
     _MODEL = AudioFlamingo3ForConditionalGeneration.from_pretrained(
         MODEL_ID,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=torch.float16,
         device_map="auto",  # uses _DEVICE under the hood; "auto" handles multi-GPU
     ).eval()
     print(
