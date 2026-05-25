@@ -60,15 +60,17 @@ def _load_model() -> None:
     print(f"[handler] loading {MODEL_ID}…", flush=True)
     _DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     _PROCESSOR = AutoProcessor.from_pretrained(MODEL_ID)
-    # float16 instead of bfloat16: AudioFlamingo3 in transformers main has a
-    # known mismatch (issue #42259) where the audio tower produces float
-    # outputs that don't auto-cast against bf16 biases in the language model.
-    # fp16 is the same memory footprint (~16 GB for 8B params) and is the
-    # default expected by the audio encoder, so the mismatch disappears.
+    # Use SDPA attention. PR #42278 (transformers, merged Nov 2025) fixed the
+    # BFloat16 audio-encoder dtype mismatch (issue #42259) but only in the
+    # SDPA / Flash-Attention-2 paths — the default eager path still has the bug.
+    # SDPA is PyTorch-native (no extra dependency) and gets the fixed code.
+    # torch_dtype="auto" preserves the dtype stored in the safetensors (bf16
+    # for MF) so we don't introduce a new mismatch by casting weights.
     _MODEL = AudioFlamingo3ForConditionalGeneration.from_pretrained(
         MODEL_ID,
-        torch_dtype=torch.float16,
-        device_map="auto",  # uses _DEVICE under the hood; "auto" handles multi-GPU
+        torch_dtype="auto",
+        attn_implementation="sdpa",
+        device_map="auto",
     ).eval()
     print(
         f"[handler] model loaded in {time.time() - started:.1f}s on {_DEVICE}",
