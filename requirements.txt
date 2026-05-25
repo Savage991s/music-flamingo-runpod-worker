@@ -4,7 +4,9 @@
 # with Music Flamingo / Audio Flamingo 3.
 
 runpod>=1.7
-transformers>=4.50
+# AudioFlamingo3ForConditionalGeneration was added to transformers in May 2026
+# and isn't in any tagged release yet — install from git main.
+transformers @ git+https://github.com/huggingface/transformers.git@main
 accelerate>=0.34
 huggingface_hub>=0.26
 librosa>=0.10.2
