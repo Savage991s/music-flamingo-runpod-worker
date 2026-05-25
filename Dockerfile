@@ -15,10 +15,11 @@
 #     uncomment the RUN line below. This bakes weights into the image
 #     (faster first-call, larger image, slower cold-pulls on new workers).
 
-# 2.4.0-py3.11-cuda12.4.1 is a verified tag on Docker Hub (runpod doesn't ship a
-# 2.5.x py3.11 tag yet). PyTorch 2.4 + CUDA 12.4 is fully compatible with
-# transformers >= 4.50 and the Audio Flamingo / Music Flamingo model code.
-FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+# PyTorch 2.8 / CUDA 12.8 — the git-main transformers we install in
+# requirements.txt imports torch.distributed.tensor.parallel.ParallelStyle,
+# which only exists in torch >= 2.6. PyTorch 2.4 throws NameError at import.
+# This is the newest verified runpod/pytorch tag on Docker Hub.
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 
 WORKDIR /app
 
