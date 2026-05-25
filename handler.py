@@ -131,6 +131,17 @@ def _critique(audio_path: Path, prompt: str, max_new_tokens: int, system_prompt:
         return_dict=True,
     ).to(_MODEL.device)
 
+    # The processor returns audio features as float32, but the model is loaded
+    # in bf16. transformers ≥ 5.0 doesn't auto-cast on the forward pass and
+    # raises "Input type (float) and bias type (c10::BFloat16) should be the
+    # same" (GitHub issue #42259). Cast every floating-point input tensor to
+    # the model's dtype; leave integer tensors (input_ids, attention masks)
+    # untouched.
+    model_dtype = _MODEL.dtype
+    for key, value in list(inputs.items()):
+        if hasattr(value, "dtype") and value.is_floating_point():
+            inputs[key] = value.to(dtype=model_dtype)
+
     with torch.no_grad():
         outputs = _MODEL.generate(**inputs, max_new_tokens=max_new_tokens)
     text = _PROCESSOR.batch_decode(
